@@ -35,11 +35,6 @@ def configure_logs(app_name: str):
     log_path.mkdir(parents=True, exist_ok=True)
 
     stream_h = logging.StreamHandler(stream=sys.stdout)
-    rotating_file_h = logging.handlers.RotatingFileHandler(
-        filename = log_path / "rotating.log",
-        maxBytes = MB * 10,
-        backupCount = 6
-    )
 
     fmter = logging.Formatter(
         fmt="{name} [{asctime}] {levelname} ({funcName}) - {message}",
@@ -47,11 +42,17 @@ def configure_logs(app_name: str):
         datefmt=DATE_FMT
     )
     stream_h.setFormatter(fmter)
+
+
+    rotating_file_h = logging.handlers.RotatingFileHandler(
+        filename = log_path / "rotating.log",
+        maxBytes = MB * 10,
+        backupCount = 6
+    )
     rotating_file_h.setFormatter(fmter)
 
     app_log = logging.getLogger(app_name)
     app_log.setLevel(logging.INFO)
-
     app_log.addHandler(stream_h)
     app_log.addHandler(rotating_file_h)
 
