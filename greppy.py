@@ -46,7 +46,7 @@ class Args(ty.NamedTuple):
                     if not match:
                         continue
                     if self.n:
-                        print(f.name, i, line, sep=": ")
+                        print(f, i, line, sep=": ")
                     else:
                         print(line)
             except UnicodeDecodeError:
