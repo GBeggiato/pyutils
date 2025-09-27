@@ -10,11 +10,11 @@ import typing as ty
 
 
 class Args(ty.NamedTuple):
-    expr: re.Pattern
-    path: Path
-    r: bool
-    i: bool
-    n: bool
+    expr : re.Pattern
+    path : Path
+    r    : bool
+    i    : bool
+    n    : bool
 
     @classmethod
     def from_cli(cls):
