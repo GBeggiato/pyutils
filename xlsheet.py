@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 import re
-from typing import Dict, NamedTuple, Tuple
+from typing import Dict, NamedTuple
 from xml.etree import cElementTree as ET
 from zipfile import ZipFile
 
@@ -49,43 +49,54 @@ def identify_sheets(component_names: dict[str, str]) -> dict[int, str]:
 
 class _XLsheetReader:
 
-    def __init__(self) -> None:
+    def __init__(self, filepath: Path) -> None:
+        self.filepath = filepath
         self.sharedstrings = []
         self.xf_index_to_xl_type = {0: XL_CELL_NUMBER}  
         self.xf_type = None
         self.xf_counts = [0, 0]
         self.fmt_is_date = {i:1 for i in (list(range(14, 23)) + list(range(45, 48)))}
         self.tag2meth = {
-            "cellStyleXfs": self.do_cellstyle,
-            "cellXfs": self.do_cellxfs,
-            "xf": self.do_xf, "row":self.do_row
+            "cellStyleXfs" : self.do_cellstyle,
+            "cellXfs"      : self.do_cellxfs,
+            "xf"           : self.do_xf, 
+            "row"          : self.do_row
         }
         for x in tuple(self.tag2meth.keys()):
             self.tag2meth[U_SSML12 + x] = self.tag2meth[x]
 
-    def open_read(self, filepath: Path, sheet: int) -> Tuple[Tuple]:
-        with filepath.open("rb") as f:
+    def _peek_components(self) -> dict[str, str]:
+        with self.filepath.open("rb") as f:
             peek = f.read(4)
-        if peek == b"PK\x03\x04": # a ZIP file
-            with ZipFile(filepath) as zf:
-                component_names = dict([(name.replace('\\', '/').lower(), name) for name in zf.namelist()])
-                if "xl/workbook.xml" in component_names:
-                    with zf.open(component_names["xl/workbook.xml"]) as zfo:
-                        self.process_zipfile(zfo) 
-                    needle = "xl/styles.xml"
-                    if needle in component_names:
-                        with zf.open(component_names[needle]) as zfo:
-                            self.process_zipfile(zfo)
-                    needle = "xl/sharedstrings.xml"
-                    if needle in component_names:
-                        with zf.open(component_names[needle]) as zfo:
-                            self.process_sharedstrings(zfo)
-                    to_read = identify_sheets(component_names).get(sheet)
-                    if to_read is None:
-                        raise ValueError("not a valid sheet")
-                    with zf.open(component_names[to_read]) as zfo: # only the first sheet
-                        return self.load_data(zfo)
-        raise TypeError("Not a good file")
+        if peek != b"PK\x03\x04":
+            raise TypeError("Not a good file")
+        with ZipFile(self.filepath) as zf:
+            component_names = dict([(name.replace('\\', '/').lower(), name) for name in zf.namelist()])
+        return component_names
+
+    def open_read(self, sheet: int) -> tuple[tuple]:
+        component_names = self._peek_components()
+        with ZipFile(self.filepath) as zf:
+            if "xl/workbook.xml" not in component_names:
+                raise TypeError("Not a good file")
+            with zf.open(component_names["xl/workbook.xml"]) as zfo:
+                self.process_zipfile(zfo) 
+            needle = "xl/styles.xml"
+            if needle in component_names:
+                with zf.open(component_names[needle]) as zfo:
+                    self.process_zipfile(zfo)
+            needle = "xl/sharedstrings.xml"
+            if needle in component_names:
+                with zf.open(component_names[needle]) as zfo:
+                    self.process_sharedstrings(zfo)
+            to_read = identify_sheets(component_names).get(sheet)
+            if to_read is None:
+                raise ValueError("not a valid sheet")
+            with zf.open(component_names[to_read]) as zfo: # only the first sheet
+                return self.load_data(zfo)
+
+    def sheets(self) -> dict[int, str]:
+        return identify_sheets(self._peek_components())
 
     def process_zipfile(self, zfo):
         for elem in ET.parse(zfo).iter():
@@ -115,7 +126,7 @@ class _XLsheetReader:
                 self.sharedstrings.append( _get_text_from_si_or_is(elem))
                 elem.clear()
 
-    def load_data(self, zfo) -> Tuple[Tuple]:
+    def load_data(self, zfo) -> tuple[tuple]:
         """ 
         creates data row by row and stores it into the object 
         
@@ -129,7 +140,7 @@ class _XLsheetReader:
                 elem.clear()
         return tuple(data)
 
-    def do_row(self, row_elem) -> Tuple:
+    def do_row(self, row_elem) -> tuple:
         """ creates a single row and returns it """
         row = []
         for cell_elem in row_elem:
@@ -268,7 +279,7 @@ def _xsd_to_boolean(s:str) -> int:
     raise ValueError("unexpected xsd:boolean value: %r" % s)
 
 
-def read_xlsheet(xlfilepath:Path, row_name:str="row", sheet: int = 1) -> Tuple[NamedTuple, ...]:
+def read_xlsheet(xlfilepath:Path, row_name:str="row", sheet: int = 1) -> tuple[NamedTuple, ...]:
     """
     - opens the given excel file
     - reads all data and organizes it in a single immutable structure
@@ -294,9 +305,14 @@ def read_xlsheet(xlfilepath:Path, row_name:str="row", sheet: int = 1) -> Tuple[N
     assert xlfilepath.suffix in (".xls", ".xlsx")
     assert isinstance(row_name, str)
     assert isinstance(sheet, int)
-    data = _XLsheetReader().open_read(xlfilepath, sheet)
+    data = _XLsheetReader(xlfilepath).open_read(sheet)
     row_factory = namedtuple(row_name, field_names=data[0])
     return tuple(row_factory(*row) for row in data[1:])
+
+
+def read_all_xlsheets(xlfilepath: Path, row_name: str="row") -> dict[int, tuple[NamedTuple, ...]]:
+    sheets = list(_XLsheetReader(xlfilepath).sheets().keys())
+    return {s: read_xlsheet(xlfilepath, row_name, s) for s in sheets}
 
 
 def xl2csv(xlfile: Path, csvfile: Path):
@@ -308,6 +324,3 @@ def xl2csv(xlfile: Path, csvfile: Path):
         data = (r._asdict() for r in data)
         w.writerows(data)
 
-
-read_xlsheet(Path(__file__).parent.parent / "_files" / "SampleData.xlsx"           , sheet=2)
-read_xlsheet(Path(__file__).parent.parent / "_files" / "SampleDataSingleSheet.xlsx", sheet=1)
