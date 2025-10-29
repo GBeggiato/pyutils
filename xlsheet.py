@@ -2,45 +2,68 @@ from collections import namedtuple
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from re import compile, UNICODE
+import re
 from typing import Dict, NamedTuple, Tuple
 from xml.etree import cElementTree as ET
 from zipfile import ZipFile
 
 
-@dataclass(frozen=True)
-class CONSTANTS:
-    XML_SPACE_ATTR:str = "{http://www.w3.org/XML/1998/namespace}space"
-    XML_WHITESPACE:str = "\t\n \r"
-    U_SSML12:str = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
-    XL_CELL_EMPTY:int = 0
-    XL_CELL_TEXT:int = 1
-    XL_CELL_NUMBER:int = 2
-    XL_CELL_DATE:int = 3
-    XL_CELL_BOOLEAN:int = 4
-    XL_CELL_ERROR:int = 5
-    V_TAG:str = U_SSML12 + "v" # value
-    F_TAG:str = U_SSML12 + "f" # formula
-    IS_TAG:str = U_SSML12 + "is" # inline string
-    epoch_1904:datetime = datetime(1904, 1, 1)
-    epoch_1900:datetime = datetime(1899, 12, 31)
-    epoch_1900_minus_1:datetime = datetime(1899, 12, 30)
-    error_code_from_text = {"#DIV/0!": 7, "#N/A": 42, "#NAME?": 29, "#NULL!": 0, "#NUM!": 36, "#REF!": 23, "#VALUE!": 15}
+XML_SPACE_ATTR:str = "{http://www.w3.org/XML/1998/namespace}space"
+XML_WHITESPACE:str = "\t\n \r"
+U_SSML12:str = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+XL_CELL_EMPTY:int = 0
+XL_CELL_TEXT:int = 1
+XL_CELL_NUMBER:int = 2
+XL_CELL_DATE:int = 3
+XL_CELL_BOOLEAN:int = 4
+XL_CELL_ERROR:int = 5
+V_TAG:str = U_SSML12 + "v" # value
+F_TAG:str = U_SSML12 + "f" # formula
+IS_TAG:str = U_SSML12 + "is" # inline string
+epoch_1904:datetime = datetime(1904, 1, 1)
+epoch_1900:datetime = datetime(1899, 12, 31)
+epoch_1900_minus_1:datetime = datetime(1899, 12, 30)
+error_code_from_text = {
+    "#DIV/0!": 7,
+    "#N/A": 42,
+    "#NAME?": 29,
+    "#NULL!": 0,
+    "#NUM!": 36,
+    "#REF!": 23,
+    "#VALUE!": 15
+}
+
+
+RE_SHEET = re.compile(r"xl/worksheets/sheet\d+.xml")
+RE_INT = re.compile(r"\d+")
+
+
+def identify_sheets(component_names: dict[str, str]) -> dict[int, str]:
+    out = dict()
+    for key in component_names.keys():
+        m = RE_SHEET.match(key)
+        if m:
+            out[int(RE_INT.findall(key)[0])] = key
+    return out
 
 
 class _XLsheetReader:
 
     def __init__(self) -> None:
         self.sharedstrings = []
-        self.xf_index_to_xl_type = {0: CONSTANTS.XL_CELL_NUMBER}  
+        self.xf_index_to_xl_type = {0: XL_CELL_NUMBER}  
         self.xf_type = None
         self.xf_counts = [0, 0]
         self.fmt_is_date = {i:1 for i in (list(range(14, 23)) + list(range(45, 48)))}
-        self.tag2meth = {"cellStyleXfs": self.do_cellstyle, "cellXfs": self.do_cellxfs, "xf": self.do_xf, "row":self.do_row}
+        self.tag2meth = {
+            "cellStyleXfs": self.do_cellstyle,
+            "cellXfs": self.do_cellxfs,
+            "xf": self.do_xf, "row":self.do_row
+        }
         for x in tuple(self.tag2meth.keys()):
-            self.tag2meth[CONSTANTS.U_SSML12 + x] = self.tag2meth[x]
+            self.tag2meth[U_SSML12 + x] = self.tag2meth[x]
 
-    def open_read(self, filepath:Path) -> Tuple[Tuple]:
+    def open_read(self, filepath: Path, sheet: int) -> Tuple[Tuple]:
         with filepath.open("rb") as f:
             peek = f.read(4)
         if peek == b"PK\x03\x04": # a ZIP file
@@ -57,7 +80,10 @@ class _XLsheetReader:
                     if needle in component_names:
                         with zf.open(component_names[needle]) as zfo:
                             self.process_sharedstrings(zfo)
-                    with zf.open(component_names["xl/worksheets/sheet1.xml"]) as zfo: # only the first sheet
+                    to_read = identify_sheets(component_names).get(sheet)
+                    if to_read is None:
+                        raise ValueError("not a valid sheet")
+                    with zf.open(component_names[to_read]) as zfo: # only the first sheet
                         return self.load_data(zfo)
         raise TypeError("Not a good file")
 
@@ -83,7 +109,7 @@ class _XLsheetReader:
         self.xf_index_to_xl_type[xfx] = is_date + 2
 
     def process_sharedstrings(self, zfo):
-        si_tag = CONSTANTS.U_SSML12 + "si"
+        si_tag = U_SSML12 + "si"
         for _, elem in ET.iterparse(zfo):
             if elem.tag == si_tag:
                 self.sharedstrings.append( _get_text_from_si_or_is(elem))
@@ -96,7 +122,7 @@ class _XLsheetReader:
         Note: first element are (usually) the column names
         """
         data = []
-        row_tag = CONSTANTS.U_SSML12 + "row"
+        row_tag = U_SSML12 + "row"
         for _, elem in ET.iterparse(zfo):
             if elem.tag == row_tag:
                 data.append(self.do_row(elem))
@@ -129,16 +155,16 @@ class _XLsheetReader:
             r = self.get_cell(None, v, xf_index)
         elif (t) and (cell_type == "s"):
             v = self.sharedstrings[int(t)]
-            r = self.get_cell(CONSTANTS.XL_CELL_TEXT, v, xf_index)
+            r = self.get_cell(XL_CELL_TEXT, v, xf_index)
         elif cell_type in ("str", "inlineStr"):
-            r = self.get_cell(CONSTANTS.XL_CELL_TEXT, t, xf_index)
+            r = self.get_cell(XL_CELL_TEXT, t, xf_index)
         elif cell_type == "b":
             v = _xsd_to_boolean(t)
-            r = self.get_cell(CONSTANTS.XL_CELL_BOOLEAN, v, xf_index)
+            r = self.get_cell(XL_CELL_BOOLEAN, v, xf_index)
         elif cell_type == "e":
             _v = "#N/A" if t is None else t
-            v = CONSTANTS.error_code_from_text[_v]
-            r = self.get_cell(CONSTANTS.XL_CELL_ERROR, v, xf_index)
+            v = error_code_from_text[_v]
+            r = self.get_cell(XL_CELL_ERROR, v, xf_index)
         else:
             raise Exception("Unknown cell type") 
         return r
@@ -146,16 +172,16 @@ class _XLsheetReader:
     def do_child(self, t, child, cell_type):
         """from child to input for dtype conversion"""
         child_tag = child.tag
-        if child_tag == CONSTANTS.V_TAG:
+        if child_tag == V_TAG:
             if cell_type in ("n", "s", "b", "e", "inlineStr"):
                 t = child.text
             elif cell_type == "str":
                 t = _cook_text(child)
             else:
                 raise Exception("Unknown cell type")
-        elif child_tag == CONSTANTS.F_TAG:
+        elif child_tag == F_TAG:
             pass
-        elif (child_tag == CONSTANTS.IS_TAG) and (cell_type == "inlineStr"):
+        elif (child_tag == IS_TAG) and (cell_type == "inlineStr"):
             t = _get_text_from_si_or_is(self, child)
         else:
             raise Exception("bad child tag")
@@ -164,7 +190,7 @@ class _XLsheetReader:
 
 def _unescape(s:str, subber=None, repl=None):
     if subber is None:
-        subber = compile(r'_x[0-9A-Fa-f]{4,4}_', UNICODE).sub
+        subber = re.compile(r'_x[0-9A-Fa-f]{4,4}_', re.UNICODE).sub
     if repl is None:
         repl = lambda mobj: chr(int(mobj.group(0)[2:6], 16))
     if "_" in s:
@@ -176,30 +202,30 @@ def _cook_text(elem):
     t = elem.text
     if t is None:
         return ''
-    if elem.get(CONSTANTS.XML_SPACE_ATTR) != 'preserve':
-        t = t.strip(CONSTANTS.XML_WHITESPACE)
+    if elem.get(XML_SPACE_ATTR) != 'preserve':
+        t = t.strip(XML_WHITESPACE)
     return _unescape(t)
 
 
 def _parse_cell(cell_contents, cell_type):
     """converts the contents of the cell into an appropriate object"""
-    if cell_type == CONSTANTS.XL_CELL_DATE:
+    if cell_type == XL_CELL_DATE:
         try:
             cell_contents = _xldate_as_datetime(float(cell_contents))
         except OverflowError:
             return cell_contents
         year = (cell_contents.timetuple())[0:3]
-        if (not CONSTANTS.epoch_1904 and year == (1899, 12, 31)) or (CONSTANTS.epoch_1904 and year == (1904, 1, 1)):
+        if (not epoch_1904 and year == (1899, 12, 31)) or (epoch_1904 and year == (1904, 1, 1)):
             cell_contents = datetime.time(cell_contents.hour, cell_contents.minute, cell_contents.second, cell_contents.microsecond)
-    elif cell_type == CONSTANTS.XL_CELL_ERROR:
+    elif cell_type == XL_CELL_ERROR:
         cell_contents = None
-    elif cell_type == CONSTANTS.XL_CELL_EMPTY:
+    elif cell_type == XL_CELL_EMPTY:
         cell_contents = None
-    elif cell_type == CONSTANTS.XL_CELL_TEXT and cell_contents=="":
+    elif cell_type == XL_CELL_TEXT and cell_contents=="":
         cell_contents = None
-    elif cell_type == CONSTANTS.XL_CELL_BOOLEAN:
+    elif cell_type == XL_CELL_BOOLEAN:
         cell_contents = bool(cell_contents)
-    elif cell_type == CONSTANTS.XL_CELL_NUMBER:
+    elif cell_type == XL_CELL_NUMBER:
         val = int(cell_contents)
         if val == cell_contents:
             cell_contents = val
@@ -207,7 +233,7 @@ def _parse_cell(cell_contents, cell_type):
 
 
 def _xldate_as_datetime(xldate:float) -> datetime:
-    epoch = CONSTANTS.epoch_1900 if xldate < 60 else CONSTANTS.epoch_1900_minus_1
+    epoch = epoch_1900 if xldate < 60 else epoch_1900_minus_1
     days = int(xldate)
     fraction = xldate - days
     seconds = int(round(fraction*86400000.0))
@@ -215,7 +241,7 @@ def _xldate_as_datetime(xldate:float) -> datetime:
     return epoch + timedelta(days, seconds, 0, milliseconds)
 
 
-def _get_text_from_si_or_is(elem, r_tag=CONSTANTS.U_SSML12+'r', t_tag=CONSTANTS.U_SSML12+'t'):
+def _get_text_from_si_or_is(elem, r_tag=U_SSML12+'r', t_tag=U_SSML12+'t'):
     accum = []
     for child in elem:
         tag = child.tag
@@ -242,14 +268,15 @@ def _xsd_to_boolean(s:str) -> int:
     raise ValueError("unexpected xsd:boolean value: %r" % s)
 
 
-def read_xlsheet(xlfilepath:Path, row_name:str="row") -> Tuple[NamedTuple, ...]:
+def read_xlsheet(xlfilepath:Path, row_name:str="row", sheet: int = 1) -> Tuple[NamedTuple, ...]:
     """
     - opens the given excel file
     - reads all data and organizes it in a single immutable structure
 
     Args:
-        xlfilepath (Path): path to the excel file
-        row_name (str, default="row"): row name to be used for the namedtuple
+        xlfilepath (Path)               : path to the excel file
+        row_name   (str, default="row") : row name to be used for the namedtuple
+        sheet      (int, default=1)     : sheet number from 1 to n
  
     ## Notes
     - only the first sheet is read
@@ -266,6 +293,21 @@ def read_xlsheet(xlfilepath:Path, row_name:str="row") -> Tuple[NamedTuple, ...]:
     assert xlfilepath.is_file()
     assert xlfilepath.suffix in (".xls", ".xlsx")
     assert isinstance(row_name, str)
-    data = _XLsheetReader().open_read(xlfilepath)
+    assert isinstance(sheet, int)
+    data = _XLsheetReader().open_read(xlfilepath, sheet)
     row_factory = namedtuple(row_name, field_names=data[0])
     return tuple(row_factory(*row) for row in data[1:])
+
+
+def xl2csv(xlfile: Path, csvfile: Path):
+    """ converts the xlsheet to a csv """
+    data = read_xlsheet(xlfile)
+    with csvfile.open("w") as fp:
+        w = csv.DictWriter(fp, data[0]._fields)
+        w.writeheader()
+        data = (r._asdict() for r in data)
+        w.writerows(data)
+
+
+read_xlsheet(Path(__file__).parent.parent / "_files" / "SampleData.xlsx"           , sheet=2)
+read_xlsheet(Path(__file__).parent.parent / "_files" / "SampleDataSingleSheet.xlsx", sheet=1)

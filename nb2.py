@@ -7,7 +7,6 @@ converts Jupiter notebooks to plain python files
 
 import argparse
 from datetime import datetime
-import itertools
 import json
 from pathlib import Path
 import typing as ty

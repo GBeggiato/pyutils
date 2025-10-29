@@ -4,6 +4,7 @@ basic extensions of the pathlib module
 usually for project-level stuff, like dynamically locating an asset file
 """
 
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Generator, TypeVar
 
@@ -13,6 +14,11 @@ from typing import Callable, Generator, TypeVar
 T = TypeVar("T")
 MaybePath = Path | None
 Paths = Generator[Path, None, None]
+
+
+def ctime(f: Path) -> datetime:
+    """the date the file was created"""
+    return datetime.fromtimestamp(f.stat().st_ctime)
 
 
 def maybe_gen(gen: Generator[T, None, None]) -> T | None:

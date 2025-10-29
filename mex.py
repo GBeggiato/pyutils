@@ -9,7 +9,7 @@ Predicate = ty.Callable[[T], bool]
 
 def sigma_algebra(it: list[T]) -> Gen[list[T]]:
     """
-    the set of all the subsets of it
+    the set of all the subsets of 'it'
 
     if t has n elements, then sigma_algebra(t) has 2^n elements
     """
