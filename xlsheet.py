@@ -1,10 +1,9 @@
 from collections import namedtuple
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 import re
-from typing import Dict, NamedTuple
-from xml.etree import cElementTree as ET
+from typing import NamedTuple
+from xml.etree import cElementTree
 from zipfile import ZipFile
 
 
@@ -36,6 +35,11 @@ error_code_from_text = {
 
 RE_SHEET = re.compile(r"xl/worksheets/sheet\d+.xml")
 RE_INT = re.compile(r"\d+")
+DEFAULT_SUBBER = re.compile(r'_x[0-9A-Fa-f]{4,4}_', re.UNICODE).sub
+
+
+def _default_repl(mobj):
+    return chr(int(mobj.group(0)[2:6], 16))
 
 
 def identify_sheets(component_names: dict[str, str]) -> dict[int, str]:
@@ -99,7 +103,7 @@ class _XLsheetReader:
         return identify_sheets(self._peek_components())
 
     def process_zipfile(self, zfo):
-        for elem in ET.parse(zfo).iter():
+        for elem in cElementTree.parse(zfo).iter():
             method = self.tag2meth.get(elem.tag)
             if method:
                 method(elem)
@@ -121,7 +125,7 @@ class _XLsheetReader:
 
     def process_sharedstrings(self, zfo):
         si_tag = U_SSML12 + "si"
-        for _, elem in ET.iterparse(zfo):
+        for _, elem in cElementTree.iterparse(zfo):
             if elem.tag == si_tag:
                 self.sharedstrings.append( _get_text_from_si_or_is(elem))
                 elem.clear()
@@ -134,7 +138,7 @@ class _XLsheetReader:
         """
         data = []
         row_tag = U_SSML12 + "row"
-        for _, elem in ET.iterparse(zfo):
+        for _, elem in cElementTree.iterparse(zfo):
             if elem.tag == row_tag:
                 data.append(self.do_row(elem))
                 elem.clear()
@@ -199,14 +203,12 @@ class _XLsheetReader:
         return t
 
 
-def _unescape(s:str, subber=None, repl=None):
+def _unescape(s: str, subber=None, repl=None):
     if subber is None:
-        subber = re.compile(r'_x[0-9A-Fa-f]{4,4}_', re.UNICODE).sub
+        subber = DEFAULT_SUBBER
     if repl is None:
-        repl = lambda mobj: chr(int(mobj.group(0)[2:6], 16))
-    if "_" in s:
-        return subber(repl, s)
-    return s
+        repl = _default_repl
+    return subber(repl, s) if "_" in s else s
 
 
 def _cook_text(elem):
@@ -227,7 +229,12 @@ def _parse_cell(cell_contents, cell_type):
             return cell_contents
         year = (cell_contents.timetuple())[0:3]
         if (not epoch_1904 and year == (1899, 12, 31)) or (epoch_1904 and year == (1904, 1, 1)):
-            cell_contents = datetime.time(cell_contents.hour, cell_contents.minute, cell_contents.second, cell_contents.microsecond)
+            cell_contents = datetime.time(
+                cell_contents.hour,
+                cell_contents.minute,
+                cell_contents.second,
+                cell_contents.microsecond
+            )
     elif cell_type == XL_CELL_ERROR:
         cell_contents = None
     elif cell_type == XL_CELL_EMPTY:
@@ -243,7 +250,7 @@ def _parse_cell(cell_contents, cell_type):
     return cell_contents
 
 
-def _xldate_as_datetime(xldate:float) -> datetime:
+def _xldate_as_datetime(xldate: float) -> datetime:
     epoch = epoch_1900 if xldate < 60 else epoch_1900_minus_1
     days = int(xldate)
     fraction = xldate - days
@@ -269,7 +276,7 @@ def _get_text_from_si_or_is(elem, r_tag=U_SSML12+'r', t_tag=U_SSML12+'t'):
     return ''.join(accum)
 
 
-def _xsd_to_boolean(s:str) -> int:
+def _xsd_to_boolean(s: str) -> int:
     if not s:
         return 0
     if s in ("1", "true", "on"):
@@ -279,7 +286,11 @@ def _xsd_to_boolean(s:str) -> int:
     raise ValueError("unexpected xsd:boolean value: %r" % s)
 
 
-def read_xlsheet(xlfilepath:Path, row_name:str="row", sheet: int = 1) -> tuple[NamedTuple, ...]:
+
+type XLData = tuple[NamedTuple, ...]
+
+
+def read_xlsheet(xlfilepath: Path, row_name: str="row", sheet: int = 1) -> XLData:
     """
     - opens the given excel file
     - reads all data and organizes it in a single immutable structure
@@ -310,17 +321,16 @@ def read_xlsheet(xlfilepath:Path, row_name:str="row", sheet: int = 1) -> tuple[N
     return tuple(row_factory(*row) for row in data[1:])
 
 
-def read_all_xlsheets(xlfilepath: Path, row_name: str="row") -> dict[int, tuple[NamedTuple, ...]]:
+def read_all_xlsheets(xlfilepath: Path, row_name: str="row") -> dict[int, XLData]:
     sheets = list(_XLsheetReader(xlfilepath).sheets().keys())
     return {s: read_xlsheet(xlfilepath, row_name, s) for s in sheets}
 
 
-def xl2csv(xlfile: Path, csvfile: Path):
-    """ converts the xlsheet to a csv """
-    data = read_xlsheet(xlfile)
+def xl2csv(csvfile: Path, xlfile: Path, row_name:str="row", sheet: int = 1):
+    """ converts one sheet of the xlfile to a csv """
+    data = read_xlsheet(xlfile, row_name, sheet)
     with csvfile.open("w") as fp:
         w = csv.DictWriter(fp, data[0]._fields)
         w.writeheader()
-        data = (r._asdict() for r in data)
-        w.writerows(data)
+        w.writerows((r._asdict() for r in data))
 
