@@ -89,14 +89,14 @@ def _validate_inputs(left, right, on, left_on, right_on, sort, suffixes, indicat
     if not isinstance(indicator, bool):
         raise TypeError(f"'indicator' must be boolean, got {type(indicator)}")
     _validators = (
-        None,
+        "None",
         "one_to_one", "1:1",
         "one_to_many", "1:m",
         "many_to_one", "m:1",
         "many_to_many", "m:m",
     )
     if validate not in _validators:
-        raise ValueError(f"'validate must be one of the following strings: {' '.join(_validators)}'")
+        raise ValueError(f"'validate must be one of the following: {' '.join(_validators)}'")
     
 
 def add_suffix_to_all_cols(df:SparkDF, name_map:dict[str, str]) -> SparkDF:
@@ -119,9 +119,7 @@ def _listify(item:STR_OR_LIST) -> list[str]:
 
 
 def restore_old_names(joined:SparkDF, column_manager:ColumnManager, join_column_manager:ColumnManager) -> SparkDF:
-    """
-    general name cleanup function
-    """
+    """general name cleanup function"""
     # first the non-join columns
     left, right = column_manager
     jleft, jright = join_column_manager
@@ -210,19 +208,8 @@ def compute_indicator_cols(left:SparkDF, right:SparkDF, joined:SparkDF, join_col
 def join_with_indicators(left:SparkDF, right:SparkDF, column_manager:ColumnManager, join_column_manager:ColumnManager, how:str):
     left, right = rename_dfs(left, right, column_manager)
     join_expr = build_join_expr(left, right, join_column_manager)
-    # =================================
     # SPARK JOIN HERE
-    joined = (
-        left
-        .join(
-            other = right,
-            on = join_expr,
-            how = how
-        )
-    )
-    # =================================
-
-    return joined
+    return left.join(other = right, on = join_expr, how = how)
 
 
 def _get_key_uniqueness(df:SparkDF, key_cols:list[str]) -> bool:
@@ -286,13 +273,13 @@ def spark_merge(
     right:SparkDF, 
     *, 
     how:str='inner', 
-    on:STR_OR_LIST=None, 
-    left_on:STR_OR_LIST=None, 
-    right_on:STR_OR_LIST=None,  
+    on:STR_OR_LIST | None=None, 
+    left_on:STR_OR_LIST | None=None, 
+    right_on:STR_OR_LIST | None=None,  
     sort:bool=False,
     suffixes:tuple[str, str]=('_left', '_right'),  
     indicator:bool=False, 
-    validate:str=None):
+    validate:str | None=None):
     """
     spark implementation of the pandas merge algorithm
     [more or less...]
@@ -325,6 +312,7 @@ def spark_merge(
         left = ColumnNames(left.columns, left_suffix), 
         right = ColumnNames(right.columns, right_suffix)
     )
+    # TODO types
     left_on, right_on = listify_join_syntax(on, left_on, right_on)
     join_column_manager = ColumnManager(
         left = ColumnNames(left_on, left_suffix), 

@@ -60,7 +60,7 @@ def parse_lines(tested: Path) -> dict[str, list[str]]:
         CLASS_KEY: classes
     }
 
-def concat_lines(testables: dict[str, list[str]], tested: Path) -> map[str]:
+def concat_lines(testables: dict[str, list[str]], tested: Path) -> map:
     mod = tested.stem
     d = datetime.now().strftime("%Y-%m-%d %H:%M")
     parts: list[Iterable[str]] = [(
