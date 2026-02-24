@@ -90,9 +90,9 @@ def _validate_inputs(left, right, on, left_on, right_on, sort, suffixes, indicat
         raise TypeError(f"'indicator' must be boolean, got {type(indicator)}")
     _validators = (
         "None",
-        "one_to_one", "1:1",
-        "one_to_many", "1:m",
-        "many_to_one", "m:1",
+        "one_to_one"  , "1:1",
+        "one_to_many" , "1:m",
+        "many_to_one" , "m:1",
         "many_to_many", "m:m",
     )
     if validate not in _validators:
@@ -269,17 +269,17 @@ def _validate(left:SparkDF, right:SparkDF, validate:str, join_column_manager:Col
 
 
 def spark_merge(
-    left:SparkDF, 
-    right:SparkDF, 
+    left: SparkDF, 
+    right: SparkDF, 
     *, 
-    how:str='inner', 
-    on:STR_OR_LIST | None=None, 
-    left_on:STR_OR_LIST | None=None, 
-    right_on:STR_OR_LIST | None=None,  
-    sort:bool=False,
-    suffixes:tuple[str, str]=('_left', '_right'),  
-    indicator:bool=False, 
-    validate:str | None=None):
+    how: str='inner', 
+    on: STR_OR_LIST | None=None, 
+    left_on: STR_OR_LIST | None=None, 
+    right_on: STR_OR_LIST | None=None,  
+    sort: bool=False,
+    suffixes: tuple[str, str]=('_left', '_right'),  
+    indicator: bool=False, 
+    validate: str | None=None): 
     """
     spark implementation of the pandas merge algorithm
     [more or less...]
@@ -306,6 +306,8 @@ def spark_merge(
       - “many_to_many” or “m:m”: allowed, but does not result in checks.
     """
     _validate_inputs(left, right, on, left_on, right_on, sort, suffixes, indicator, validate)
+    assert left_on is not None
+    assert right_on is not None
     # setup for columns management
     left_suffix, right_suffix = suffixes
     column_manager = ColumnManager(
@@ -336,6 +338,7 @@ def spark_merge(
 
 import pandas as pd
 
+
 def setup():
     pk = [3, 2, 2, 4]
     left = pd.DataFrame()
@@ -351,6 +354,9 @@ def setup():
 
 def main():
     spark = SparkSession.getActiveSession()
+    if spark is None:
+        print("no spark session found, bailing out")
+        return
 
     kwargs = {
         "how": "inner", 
@@ -382,3 +388,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
