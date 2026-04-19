@@ -117,23 +117,14 @@ def is_workday(d: date) -> bool:
     return d.weekday() < WEEKDAY_SAT
 
 
-def closest_previous_working_day(d: date) -> date:
-    """converts weekends into fridays. do not implement IRL"""
-    return d if is_workday(d) else d - (ONE_DAY * (d.weekday() - WEEKDAY_FRI))
-
-
-def closest_next_working_day(d: date) -> date:
-    return d if is_workday(d) else d + (ONE_DAY * (DAYS_IN_WEEK - d.weekday()))
-
-
 def previous_working_day(d: date) -> date:
-    dd = closest_previous_working_day(d)
-    return prev_day(dd) if is_workday(d) else dd
+    p = prev_day(d)
+    return p if is_workday(p) else p - (ONE_DAY * (p.weekday() - WEEKDAY_FRI))
     
 
 def next_working_day(d: date) -> date:
-    dd = closest_next_working_day(d)
-    return next_day(dd) if is_workday(d) else dd
+    n = next_day(d)
+    return n if is_workday(n) else n + (ONE_DAY * (DAYS_IN_WEEK - n.weekday()))
 
 
 def previous_monday(d: date) -> date:
@@ -141,12 +132,15 @@ def previous_monday(d: date) -> date:
 
 
 def next_monday(d: date) -> date:
-    return d + (DAYS_IN_WEEK - d.weekday())
+    return d + (ONE_DAY * (DAYS_IN_WEEK - d.weekday()))
 
 
 def previous_friday(d: date) -> date:
     wd = d.weekday()
-    return prev_week(d) if wd == WEEKDAY_FRI else d - (ONE_DAY * ((wd + 3) % 7))
+    if wd == WEEKDAY_FRI:
+        return prev_week(d) 
+    else:
+        return d - (ONE_DAY * ((wd + 3) % DAYS_IN_WEEK))
 
 
 def next_friday(d: date) -> date:
