@@ -198,7 +198,7 @@ class DataSource:
             self._db.unlink()
 
     def assert_with_ctx(self):
-        assert self._db is not None and self._conn is not None, "can be called only from 'with' context"
+        assert (self._db is not None) and (self._conn is not None), "can be called only from 'with' context"
 
     def tables(self) -> list[str]:
         self.assert_with_ctx()

@@ -14,7 +14,7 @@ from typing import Callable, NamedTuple
 SLEEP_SECONDS = 1
 DATE_FMT = "%Y-%m-%d %H:%M:%S"
 
-type SchedulableFunc = Callable[[None], None]
+type SchedulableFunc = Callable[[], None]
 
 
 class _Island(NamedTuple):
