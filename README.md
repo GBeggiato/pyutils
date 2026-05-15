@@ -97,6 +97,8 @@ extension to the pyspark api to get a pandas-like merge function
 read an Excel file using only the standard library
 
 ### stay_alive.py
+
+#### this is an extremely small subset of: https://github.com/asweigart/pyautogui/tree/master
 clicks on the screen every 20 secs, only in WIndows
 
 guess why I need this
