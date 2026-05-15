@@ -96,3 +96,7 @@ extension to the pyspark api to get a pandas-like merge function
 ### xlsheet.py
 read an Excel file using only the standard library
 
+### stay_alive.py
+clicks on the screen every 20 secs, only in WIndows
+
+guess why I need this
