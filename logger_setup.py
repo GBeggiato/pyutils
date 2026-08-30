@@ -43,7 +43,6 @@ def configure_logs(app_name: str):
     )
     stream_h.setFormatter(fmter)
 
-
     rotating_file_h = logging.handlers.RotatingFileHandler(
         filename = log_path / "rotating.log",
         maxBytes = MB * 10,

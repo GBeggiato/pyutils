@@ -6,11 +6,11 @@ from pathlib import Path
 from typing import Iterable
 
 
-CLASS_KEY = "C"
-FUNC_KEY = "F"
-EMPTY = ""
-INDENT = "    "
-PASS = f"{INDENT*2}pass"
+KEY_CLASS = "C"
+KEY_FUNC  = "F"
+EMPTY     = ""
+INDENT    = "    "
+PASS      = f"{INDENT*2}pass"
 
 
 def parse_args() -> tuple[Path, Path] | None:
@@ -56,8 +56,8 @@ def parse_lines(tested: Path) -> dict[str, list[str]]:
         elif isinstance(node, ast.ClassDef):
             classes.append(node.name)
     return {
-        FUNC_KEY: funcs,
-        CLASS_KEY: classes
+        KEY_FUNC: funcs,
+        KEY_CLASS: classes
     }
 
 def concat_lines(testables: dict[str, list[str]], tested: Path) -> map:
@@ -68,9 +68,9 @@ def concat_lines(testables: dict[str, list[str]], tested: Path) -> map:
         "import unittest", EMPTY,
         f"import {mod}",
     )]
-    if testables[CLASS_KEY]:
+    if testables[KEY_CLASS]:
         parts.append((
-            f"from {mod} import {n}" for n in testables[CLASS_KEY]
+            f"from {mod} import {n}" for n in testables[KEY_CLASS]
         ))
     parts.append((
         EMPTY,
@@ -78,14 +78,14 @@ def concat_lines(testables: dict[str, list[str]], tested: Path) -> map:
         f"class Test{mod.title()}(unittest.TestCase):",
         EMPTY,
     ))
-    if testables[CLASS_KEY]:
+    if testables[KEY_CLASS]:
         parts.append((
             f"{INDENT}def setUp(self):", PASS, EMPTY,
             f"{INDENT}def tearDown(self):", PASS, EMPTY,
         ))
     f_parts = itertools.chain.from_iterable(map(
         lambda fl: (f"{INDENT}def test_{fl}(self):", PASS, f"{EMPTY}"),
-        testables[FUNC_KEY]
+        testables[KEY_FUNC]
     ))
     parts.append(f_parts)
     parts.append((

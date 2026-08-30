@@ -11,28 +11,23 @@ MOUSEEVENTF_LEFTCLICK = MOUSEEVENTF_LEFTDOWN + MOUSEEVENTF_LEFTUP
 
 
 def _sendMouseEvent(ev: Literal[6], x: int, y: int, dwData: int=0):
-    assert x != None and y != None, 'x and y cannot be set to None'
     width  = ctypes.windll.user32.GetSystemMetrics(0)
     height = ctypes.windll.user32.GetSystemMetrics(1)
-    convertedX = 65536 * x // width + 1
-    convertedY = 65536 * y // height + 1
-    ctypes.windll.user32.mouse_event(ev, ctypes.c_long(convertedX), ctypes.c_long(convertedY), dwData, 0)
+    convertedX = ctypes.c_long(65536 * x // width + 1)
+    convertedY = ctypes.c_long(65536 * y // height + 1)
+    ctypes.windll.user32.mouse_event(ev, convertedX, convertedY, dwData, 0)
     if ctypes.windll.kernel32.GetLastError() != 0:
        raise ctypes.WinError()
 
-        
-def _left_click():
-    try:
-        _sendMouseEvent(MOUSEEVENTF_LEFTCLICK, _PHONY, _PHONY)
-    except (PermissionError, OSError):
-        pass
+def _click():
+    _sendMouseEvent(ev=MOUSEEVENTF_LEFTCLICK, x=_PHONY, y=_PHONY)
 
 
 def main():
     if sys.platform != "win32":
         raise OSError("only windows !")
     while 1:
-        _left_click()
+        _click()
         time.sleep(20)
 
 

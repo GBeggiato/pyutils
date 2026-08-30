@@ -12,13 +12,11 @@ from pathlib import Path
 import typing as ty
 
 
-CELLS = "cells"
+CELLS     = "cells"
 CELL_TYPE = "cell_type"
-SOURCE = "source"
-CODE = "code"
-
+SOURCE    = "source"
+CODE      = "code"
 THIS_FILE = Path(__file__).name
-
 
 
 class _Args(ty.NamedTuple):
@@ -49,7 +47,6 @@ def parse_args() -> _Args | None:
         help="""if present, wraps generated code into an 'if __name__ == "__main__": main()' block"""
     )
     parsed = parser.parse_args()
-
     inpt = Path(parsed.input)
     if not inpt.exists():
         print(f"not found: {inpt}")
@@ -109,16 +106,12 @@ def _show(args: _Args, code: list[str]):
         print(f"saved output to {out}")
 
 
-def convert(args: _Args):
-    lines = _validate(args.inpt)
-    code = _codegen(lines, args.make_main)
-    _show(args, code)
-
-
 def main():
     if (args := parse_args()) is None:
         return
-    convert(args)
+    lines = _validate(args.inpt)
+    code = _codegen(lines, args.make_main)
+    _show(args, code)
 
 
 if __name__ == "__main__":
