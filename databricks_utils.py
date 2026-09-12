@@ -52,24 +52,13 @@ def table_drop(name: TablePath):
     sql_execute(sql_drop(name))
 
 
-def table_save(df: DataFrame, name: TablePath):
-    "like saving to a file: old gets deleted"
-    (
-        df
-        .write
-        .option("overwriteSchema", "true")
-        .saveAsTable(name, mode="overwrite")
-    )
+def table_overwrite(df: DataFrame, name: TablePath):
+    df.write.option("overwriteSchema", "true").saveAsTable(name, mode="overwrite")
 
 
 def table_append(df: DataFrame, name: TablePath):
     "append to existing table, tolerating for new cols"
-    (
-        df
-        .write
-        .option("mergeSchema", "true")
-        .saveAsTable(name, mode="append")
-    )
+    df.write.option("mergeSchema", "true").saveAsTable(name, mode="append")
 
 # ==============================================================================
 # types
@@ -119,6 +108,7 @@ class TablePath(str):
         return self._with_new_part(new, 2)
 
     def exists(self) -> bool:
+        "calls into spark.catalog"
         return table_exists(self)
 
 # ==============================================================================
