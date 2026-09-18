@@ -1,7 +1,8 @@
+from dataclasses import dataclass
 from graphlib import TopologicalSorter
 import itertools
 import string
-from typing import Any, Callable, Iterable, Literal, Self
+from typing import Any, Callable, ClassVar, Iterable, Literal, Self
 
 from pyspark.sql import DataFrame, SparkSession
 
@@ -32,7 +33,7 @@ def is_valid_tablepath(value: Any) -> bool:
         return False
     if not value.count(_DOT) == 2:
         return False
-    return all(_ALLOWED_CHARS.issuperset(p) for p in dot_split(value))
+    return all((_ALLOWED_CHARS.issuperset(p) and len(p) > 0) for p in dot_split(value))
 
 # ==============================================================================
 # spark connection
@@ -214,4 +215,43 @@ def flatten[T](xs: list[list[T]]) -> list[T]:
     return list(itertools.chain.from_iterable(xs))
 
 # ==============================================================================
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ViewDefinition:
+    """
+    since named parameter syntax is not supported when creating views, here's
+    the next best thing.
+
+    - sqlTemplate: str, written accordingly to the Syntax defined in the string
+      std lib package
+    - args: dict[str, str], the args to be replaced
+
+    ## Syntax Reference:
+    https://docs.python.org/3/library/string.html#template-strings-strings
+
+    `NOTE` that we still support also the official databricks named paramenter
+    syntax (:param)
+    """
+    _TARGET_KEY: ClassVar[str]
+    target: TablePath
+    args: dict[str, object]
+    sql_template: str
+
+    def __post_init__(self):
+        if self._TARGET_KEY in self.args.keys():
+            raise ValueError(f"{self._TARGET_KEY} is a reserved key !")
+
+    def build_sql(self) -> str:
+        sql = (
+            string
+            .Template(self.sql_template)
+            .substitute(self.args | {self._TARGET_KEY: self.target})
+
+        )
+        if sql.lower().strip().startswith("create"):
+            return sql
+        return sql_create_view(self.target, sql)
+
+    def execute(self):
+        sparksession().sql(sqlQuery=self.build_sql(), args=self.args)
 
