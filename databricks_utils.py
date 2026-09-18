@@ -47,19 +47,6 @@ def table_exists(table: str, db: str | None = None) -> bool:
     "spark.catalog.tableExists(tableName, dbName)"
     return sparksession().catalog.tableExists(table, db)
 
-
-def table_drop(name: TablePath):
-    sql_execute(sql_drop(name))
-
-
-def table_overwrite(df: DataFrame, name: TablePath):
-    df.write.option("overwriteSchema", "true").saveAsTable(name, mode="overwrite")
-
-
-def table_append(df: DataFrame, name: TablePath):
-    "append to existing table, tolerating for new cols"
-    df.write.option("mergeSchema", "true").saveAsTable(name, mode="append")
-
 # ==============================================================================
 # types
 # ==============================================================================
@@ -138,6 +125,20 @@ def sql_drop(table: TablePath) -> str:
 def sql_execute(sqlQuery: str, args: dict[str, Any] | list | None = None):
     "spark.sql(sqlQuery, args)"
     sparksession().sql(sqlQuery=sqlQuery, args=args)
+
+
+def table_drop(name: TablePath):
+    sql_execute(sql_drop(name))
+
+
+def table_overwrite(df: DataFrame, name: TablePath):
+    df.write.option("overwriteSchema", "true").saveAsTable(name, mode="overwrite")
+
+
+def table_append(df: DataFrame, name: TablePath):
+    "append to existing table, tolerating for new cols"
+    df.write.option("mergeSchema", "true").saveAsTable(name, mode="append")
+
 
 # ==============================================================================
 # graphlib wrapper
