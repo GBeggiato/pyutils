@@ -60,8 +60,12 @@ class TablePath(str):
         return super().__new__(cls, value)
 
     @classmethod
+    def from_strings(cls, *strings: str) -> Self:
+        return cls(dot_join(*strings))
+
+    @classmethod
     def from_parts(cls, catalog: str, schema: str, name: str) -> Self:
-        return cls(dot_join(catalog, schema, name))
+        return cls.from_strings(catalog, schema, name)
 
     @property
     def parts(self) -> list[str]:
