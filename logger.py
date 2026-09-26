@@ -53,3 +53,9 @@ def configure(app_name: str):
         app_log.addHandler(stream_h)
         app_log.addHandler(rotating_file_h)
 
+
+def configure_for_library(name: str):
+    """
+    """
+    lgr = get(name)
+    lgr.addHandler(logging.NullHandler())
