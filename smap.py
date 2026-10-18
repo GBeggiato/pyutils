@@ -7,10 +7,11 @@ import shutil
 import sqlite3
 from sqlite3 import Connection
 import tempfile
-from typing import Any, Generator, Iterable
+from typing import Any, Generator, Iterable, Self
 
 
 type ColToType = list[tuple[str, str | str]]
+type Rows = tuple[Any, ...]
 
 
 REAL = "REAL"
@@ -62,26 +63,26 @@ def _str_to_sqlite_type(s: str) -> str | None:
 @dataclasses.dataclass(slots=True)
 class _QueryResult:
     _columns: tuple[str, ...]
-    _rows: Iterable[tuple]
+    _rows: Iterable[Rows]
 
     @classmethod
-    def _from_cursor(cls, c: sqlite3.Cursor):
+    def _from_cursor(cls, c: sqlite3.Cursor) -> Self:
         cols = tuple(x[0] for x in c.description)
         return cls(cols, iter(c))
 
     def columns(self) -> tuple[str, ...]:
         return self._columns
 
-    def rows(self) -> Generator[tuple, Any, None]:
+    def rows(self) -> Generator[tuple[Rows], Any, None]:
         yield from self._rows
 
-    def to_csv(self, f: Path):
+    def to_csv(self, f: Path) -> None:
         with f.open("w") as fp:
             writer = csv.writer(fp)
             writer.writerow(self._columns)
             writer.writerows(self._rows)
 
-    def to_sqlite(self, f: Path, table_name: str):
+    def to_sqlite(self, f: Path, table_name: str) -> None:
         rows = iter(self._rows)
         collected_rows = []
         d: None | ColToType = None
@@ -107,7 +108,7 @@ class _QueryResult:
             conn.executemany(q_insert, collected_rows)
             conn.executemany(q_insert, rows)
 
-    def head(self, *, show_all:bool=False):
+    def head(self, *, show_all:bool=False) -> None:
         """
         helper method to check the result
 
@@ -127,7 +128,7 @@ class _FileTypesParser:
         self.colname_to_sqlitetype = col_to_type
 
     @classmethod
-    def from_sqlite(cls, f: Path, table_name: str):
+    def from_sqlite(cls, f: Path, table_name: str) -> Self:
         # NOTE: the 'table_name' is both the old table name and the new table name
         with sqlite3.connect(f) as conn:
             q = f"select * from {table_name} limit 2"
@@ -141,8 +142,8 @@ class _FileTypesParser:
         return cls(list(d.items()))
 
     @classmethod
-    def from_csv(cls, f: Path):
-        typedict = {}
+    def from_csv(cls, f: Path) -> Self:
+        typedict: dict[str, str | None] = {}
         with f.open() as fp:
             reader = csv.DictReader(fp)
             for row in reader:
@@ -180,7 +181,7 @@ class DataSource:
         self._conn: Connection | None = None
 
     @property
-    def path(self):
+    def path(self) -> Path:
         """path to the db file"""
         self.assert_with_ctx()
         assert self._db.exists()
@@ -197,7 +198,7 @@ class DataSource:
         if self._db is not None and self._db.exists():
             self._db.unlink()
 
-    def assert_with_ctx(self):
+    def assert_with_ctx(self) -> None:
         assert (self._db is not None) and (self._conn is not None), "can be called only from 'with' context"
 
     def tables(self) -> list[str]:

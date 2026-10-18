@@ -27,7 +27,7 @@ class ColumnNames:
     @property
     def old_names(self) -> list[str]:
         return self._original_names
-    
+
     @cached_property
     def new_names(self) -> list[str]:
         return [f"{c}{self.suffix}" for c in self._original_names]
@@ -35,25 +35,37 @@ class ColumnNames:
     @cached_property
     def old_to_new(self) -> dict[str, str]:
         return {old:new for old, new in zip(self._original_names, self.new_names)}
-    
+
     @cached_property
     def new_to_old(self) -> dict[str, str]:
         return {v:k for k,v in self.old_to_new.items()}
 
-    
+
 class ColumnManager(NamedTuple):
     left: ColumnNames
     right: ColumnNames
 
     @property
-    def common_cols_old(self) -> frozenset:
+    def common_cols_old(self) -> frozenset[str]:
         return frozenset(self.left.old_names).intersection(self.right.old_names)
-    
-    def new_names_zip(self):
+
+    def new_names_zip(self) -> zip[tuple[str, str]]:
         return zip(self.left.new_names, self.right.new_names)
 
 
-def _validate_inputs(left, right, on, left_on, right_on, sort, suffixes, indicator, validate):
+_ColIdentifiers = str | list[str] | None
+
+def _validate_inputs(
+    left: SparkDF,
+    right: SparkDF,
+    on: _ColIdentifiers,
+    left_on: _ColIdentifiers,
+    right_on: _ColIdentifiers,
+    sort: bool,
+    suffixes: list[str] | tuple[str, str],
+    indicator: bool,
+    validate: str | None
+) -> None:
     if not isinstance(left, SparkDF):
         raise TypeError(f"'left' must be a spark dataframe, got {type(left)}")
     if not isinstance(right, SparkDF):
@@ -97,11 +109,11 @@ def _validate_inputs(left, right, on, left_on, right_on, sort, suffixes, indicat
     )
     if validate not in _validators:
         raise ValueError(f"'validate must be one of the following: {' '.join(_validators)}'")
-    
+
 
 def add_suffix_to_all_cols(df:SparkDF, name_map:dict[str, str]) -> SparkDF:
     """
-    returns a copy of the input dataframe with all columns 
+    returns a copy of the input dataframe with all columns
     presenting the provided suffix
     """
     renamed_df = df
@@ -118,18 +130,18 @@ def _listify(item:STR_OR_LIST) -> list[str]:
     return item
 
 
-def restore_old_names(joined:SparkDF, column_manager:ColumnManager, join_column_manager:ColumnManager) -> SparkDF:
+def restore_old_names(joined: SparkDF, column_manager: ColumnManager, join_column_manager: ColumnManager) -> SparkDF:
     """general name cleanup function"""
     # first the non-join columns
     left, right = column_manager
     jleft, jright = join_column_manager
     _to_skip = frozenset(itertools.chain(
-        jleft.new_names, 
+        jleft.new_names,
         jright.new_names,
         frozenset(left.old_to_new.get(i) for i in column_manager.common_cols_old),
         frozenset(right.old_to_new.get(i) for i in column_manager.common_cols_old)
     ))
-    for new_name in joined.columns:   
+    for new_name in joined.columns:
         if new_name in _to_skip:
             continue
         old_name = left.new_to_old.get(new_name) or right.new_to_old.get(new_name)
@@ -141,7 +153,7 @@ def restore_old_names(joined:SparkDF, column_manager:ColumnManager, join_column_
     for i in range(0, len(join_cols), 2):
         left_name = join_cols[i]
         right_name = join_cols[i+1]
-        old_name = left.new_to_old.get(left_name)
+        old_name = left.new_to_old.get(left_name, "")
         joined = (
             joined
             .withColumnRenamed(left_name, old_name)
@@ -179,7 +191,7 @@ def rename_dfs(left:SparkDF, right:SparkDF, column_manager:ColumnManager) -> tup
     return left, right
 
 
-def get_indicator_cols_names(join_column_manager:ColumnManager) -> tuple:
+def get_indicator_cols_names(join_column_manager:ColumnManager) -> tuple[tuple[str, str], ...]:
     indicator_left = (f"{col}_indicator" for col in join_column_manager.left.new_names)
     indicator_right = (f"{col}_indicator" for col in join_column_manager.right.new_names)
     return tuple(zip(indicator_left, indicator_right))
@@ -205,7 +217,7 @@ def compute_indicator_cols(left:SparkDF, right:SparkDF, joined:SparkDF, join_col
     return joined
 
 
-def join_with_indicators(left:SparkDF, right:SparkDF, column_manager:ColumnManager, join_column_manager:ColumnManager, how:str):
+def join_with_indicators(left:SparkDF, right:SparkDF, column_manager:ColumnManager, join_column_manager:ColumnManager, how:str) -> SparkDF:
     left, right = rename_dfs(left, right, column_manager)
     join_expr = build_join_expr(left, right, join_column_manager)
     # SPARK JOIN HERE
@@ -269,17 +281,18 @@ def _validate(left:SparkDF, right:SparkDF, validate:str, join_column_manager:Col
 
 
 def spark_merge(
-    left: SparkDF, 
-    right: SparkDF, 
-    *, 
-    how: str='inner', 
-    on: STR_OR_LIST | None=None, 
-    left_on: STR_OR_LIST | None=None, 
-    right_on: STR_OR_LIST | None=None,  
+    left: SparkDF,
+    right: SparkDF,
+    *,
+    how: str='inner',
+    on: STR_OR_LIST | None=None,
+    left_on: STR_OR_LIST | None=None,
+    right_on: STR_OR_LIST | None=None,
     sort: bool=False,
-    suffixes: tuple[str, str]=('_left', '_right'),  
-    indicator: bool=False, 
-    validate: str | None=None): 
+    suffixes: tuple[str, str]=('_left', '_right'),
+    indicator: bool=False,
+    validate: str | None=None
+) -> SparkDF:
     """
     spark implementation of the pandas merge algorithm
     [more or less...]
@@ -311,13 +324,12 @@ def spark_merge(
     # setup for columns management
     left_suffix, right_suffix = suffixes
     column_manager = ColumnManager(
-        left = ColumnNames(left.columns, left_suffix), 
+        left = ColumnNames(left.columns, left_suffix),
         right = ColumnNames(right.columns, right_suffix)
     )
-    # TODO types
     left_on, right_on = listify_join_syntax(on, left_on, right_on)
     join_column_manager = ColumnManager(
-        left = ColumnNames(left_on, left_suffix), 
+        left = ColumnNames(left_on, left_suffix),
         right = ColumnNames(right_on, right_suffix)
     )
     # validate type of join if requested
@@ -330,7 +342,7 @@ def spark_merge(
     # column name cleanup
     joined = restore_old_names(joined, column_manager, join_column_manager)
     if sort:
-        joined = joined.orderBy(*join_column_manager.left.old_names)    
+        joined = joined.orderBy(*join_column_manager.left.old_names)
     return joined
 
 # =======================================================================
@@ -339,7 +351,7 @@ def spark_merge(
 import pandas as pd
 
 
-def setup():
+def setup() -> tuple[pd.DataFrame, pd.DataFrame]:
     pk = [3, 2, 2, 4]
     left = pd.DataFrame()
     left["PK"] = pk
@@ -352,40 +364,40 @@ def setup():
     return left, right
 
 
-def main():
-    spark = SparkSession.getActiveSession()
-    if spark is None:
-        print("no spark session found, bailing out")
-        return
-
-    kwargs = {
-        "how": "inner", 
-        "on": ["PK"], 
-        "suffixes": ('_left', '_right'), 
-        "sort": True,
-        "indicator": True,
-        "validate": "m:m"
-    }
-    
-    left, right = setup()
-
-    try:
-        m = pd.merge(left, right, **kwargs)
-        print(m, end="\n\n")
-    except pd.errors.MergeError as e:
-        print(e)
-
-    try:
-        j = spark_merge(
-            spark.createDataFrame(left), 
-            spark.createDataFrame(right), 
-            **kwargs
-        ).toPandas()
-        print(j, end="\n\n")
-    except SparkMergeError as e:
-        print(e)
-    
-
-if __name__ == "__main__":
-    main()
+# def main() -> None:
+#     spark = SparkSession.getActiveSession()
+#     if spark is None:
+#         print("no spark session found, bailing out")
+#         return
+#
+#     kwargs = {
+#         "how": "inner",
+#         "on": ["PK"],
+#         "suffixes": ('_left', '_right'),
+#         "sort": True,
+#         "indicator": True,
+#         "validate": "m:m"
+#     }
+#
+#     left, right = setup()
+#
+#     try:
+#         m = pd.merge(left, right, **kwargs)
+#         print(m, end="\n\n")
+#     except pd.errors.MergeError as e:
+#         print(e)
+#
+#     try:
+#         j = spark_merge(
+#             spark.createDataFrame(left),
+#             spark.createDataFrame(right),
+#             **kwargs
+#         ).toPandas()
+#         print(j, end="\n\n")
+#     except SparkMergeError as e:
+#         print(e)
+#
+#
+# if __name__ == "__main__":
+#     main()
 

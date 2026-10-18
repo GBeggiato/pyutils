@@ -39,7 +39,7 @@ def parse_args() -> tuple[Path, Path] | None:
     return tested, out_dir
 
 
-def walk_ast(node: ast.AST):
+def walk_ast(node: ast.AST) -> Iterable[ast.AST]:
     yield node
     for child in ast.iter_child_nodes(node):
         yield from walk_ast(child)
@@ -60,7 +60,7 @@ def parse_lines(tested: Path) -> dict[str, list[str]]:
         KEY_CLASS: classes
     }
 
-def concat_lines(testables: dict[str, list[str]], tested: Path) -> map:
+def concat_lines(testables: dict[str, list[str]], tested: Path) -> map[str]:
     mod = tested.stem
     d = datetime.now().strftime("%Y-%m-%d %H:%M")
     parts: list[Iterable[str]] = [(
@@ -94,7 +94,7 @@ def concat_lines(testables: dict[str, list[str]], tested: Path) -> map:
     return map(lambda s: f"{s}\n", itertools.chain.from_iterable(parts))
 
 
-def main():
+def main() -> None:
     parsed = parse_args()
     if parsed is None:
         print("could not properly parse inputs")

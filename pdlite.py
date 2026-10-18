@@ -40,10 +40,10 @@ def tables(db: Path) -> Generator[str, None, None]:
         yield from conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
 
 
-def to_sqlite(df: DF, table: str, db: Path, if_exists: Literal["fail", "replace", "append"]="fail"):
+def to_sqlite(df: DF, table: str, db: Path, if_exists: Literal["fail", "replace", "append"]="fail") -> None:
     """dump a pandas df to a sqlite3 db"""
     with _pdlite_connect(db) as conn:
-        return df.to_sql(name=table, con=conn, if_exists=if_exists, index=False)
+        df.to_sql(name=table, con=conn, if_exists=if_exists, index=False)
 
 
 def from_sqlite(table: str, db: Path, sql: Optional[str]=None) -> DF:
@@ -53,7 +53,7 @@ def from_sqlite(table: str, db: Path, sql: Optional[str]=None) -> DF:
         return pd.read_sql(sql=_sql, con=conn)
 
 
-def query_df(df: DF, sql: str, table = "temp_table") -> DF:
+def query_df(df: DF, sql: str, table: str = "temp_table") -> DF:
     """run a sqlite3 query on a pandas df"""
     with tempfile.TemporaryDirectory() as td:
         db = Path(td) / "temp.db"

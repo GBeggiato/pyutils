@@ -27,7 +27,7 @@ def get(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
 
-def configure(app_name: str):
+def configure(app_name: str) -> None:
     """ basic logging config """
     fmter = logging.Formatter(
         fmt="{name} [{asctime}] {levelname} - {message} ({funcName})",
@@ -54,7 +54,7 @@ def configure(app_name: str):
         app_log.addHandler(rotating_file_h)
 
 
-def configure_for_library(name: str):
+def configure_for_library(name: str) -> None:
     """
     """
     lgr = get(name)
